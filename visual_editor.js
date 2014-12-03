@@ -1,4 +1,13 @@
 var MixpanelVisualWeb = function(mixpanelToken) { 
+     var eventPossibilities = {
+        'div': ['click', 'mouseenter'],
+        'a': ['click', 'mouseenter'],
+        'span': ['click', 'mouseenter'],
+        'th': ['click'],
+        'input': ['change'],
+        'form': ['submit']
+    }
+    
     var customerId = mixpanelToken;
     var EventsObj = null;
     var eventsObj = null;
@@ -13,6 +22,7 @@ var MixpanelVisualWeb = function(mixpanelToken) {
                 eventsObj = new EventsObj();
             } else {
                 eventsObj = results[0];
+                boundEvents = eventsObj.get('events') ? JSON.parse(eventsObj.get('events')) : {};
             }
             initTracking();
           },
@@ -23,18 +33,7 @@ var MixpanelVisualWeb = function(mixpanelToken) {
     };
 
     var initTracking = function() { 
-        console.log('using mixpanel token: ' + mixpanelToken);
-        mixpanel.init(mixpanelToken, {}, 'awesome');
-        var m = mixpanel.awesome;
-        var eventPossibilities = {
-            'div': ['click', 'mouseenter'],
-            'a': ['click', 'mouseenter'],
-            'span': ['click', 'mouseenter'],
-            'th': ['click'],
-            'input': ['change'],
-            'form': ['submit']
-        }
-        var mode = "normal";
+       
         var boundEvents = {};
         var curSelector = undefined;
         var selectors = _.keys(eventPossibilities).join(':not(".__mpignore"), ');
@@ -64,24 +63,8 @@ var MixpanelVisualWeb = function(mixpanelToken) {
         });
         var $hitarea = $('<div class="mpevents_hit_area">').css({position: 'absolute', border: '2px solid yellow', zIndex: 2147483646, pointerEvents: 'none'}).appendTo($('body'))
 
-        var loadEvents = function() {
-            boundEvents = eventsObj.get('events') ? JSON.parse(eventsObj.get('events')) : {};
-            for (var selector in boundEvents) {
-                for(var event in boundEvents[selector]) {
-                    (function() {
-                        var event_to_track = boundEvents[selector][event];
-                        console.log("$('body').on('" + selector + "').on('" + event + "', function() { m.track('" + event_to_track + '");}"');
-                        $('body').on(event, selector, function() {
-                            console.log("sending event: " + event_to_track);
-                            m.track(event_to_track);
-                        });
-                    })();
-                }
-            }
-        }
         var discoveryMode = function() {
             console.log('entering discovery mode');
-            mode = "discovery";
             $hitarea.show();
             $('body')
                 .off('.mpselect')
@@ -98,7 +81,6 @@ var MixpanelVisualWeb = function(mixpanelToken) {
         };
 
         var editMode = function(e) {
-            mode = "edit";
             var $el = $(this);
             var tag = $(this).prop("tagName");
             $('body').off('.mpselect');
@@ -116,26 +98,30 @@ var MixpanelVisualWeb = function(mixpanelToken) {
                 $_row.appendTo($eventRows);
             }
 
-            curSelector = undefined;
-            if ($el.attr("id")) {
-                curSelector = "#" + $el.attr("id");
-            } else if ($el.attr('name')) {
-                curSelector = tag + "[name='" + $el.attr('name') + "']";
-            } else if ($el[0].className) {
-                curSelector = tag + "." + $el[0].className.trim().replace(/ /g, ".");
-                curSelector += ":contains('" + $el.text().replace(["'", "\""], ["\'", "\\\""]) + "')";
+            var _generateElementSelector = function($el) { 
+                if ($el.attr("id")) {
+                    return "#" + $el.attr("id");
+                } else if ($el.attr('name')) {
+                   return tag + "[name='" + $el.attr('name') + "']";
+                } else if ($el[0].className) {
+                    return tag + "." + $el[0].className.trim().replace(/ /g, ".") + ":contains('" + _getDirectText($el).replace(["'", "\""], ["\'", "\\\""]) + "')";
+                } else {
+                    return tag + ":contains('" + _getDirectText($el).replace(["'", "\""], ["\'", "\\\""]) + "')";
+                }
             }
+
+            var _getDirectText = function($el) {
+                return $el
+                    .clone()    //clone the element
+                    .children() //select all the children
+                    .remove()   //remove all the children
+                    .end()  //again go back to selected element
+                    .text();
+            }
+            curSelector = _generateElementSelector($el.parent()) + " " + _generateElementSelector($el);
             console.log(curSelector);
             e.stopImmediatePropagation();
             return false;
-        };
-
-        var normalMode = function() {
-            console.log('entering normal mode');
-            mode = "normal";
-            $('body').off('.mpselect');
-            $popup.hide();
-            $hitarea.hide();
         };
 
         discoveryMode();
